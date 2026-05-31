@@ -1,0 +1,40 @@
+{
+  "version": 5,
+  "dataForRoots": [
+    {
+      "commitData": [
+        {
+          "changeDescriptions": null,
+          "duration": 8.0,
+          "effectDuration": null,
+          "fiberActualDurations": [[1, 8.0], [2, 6.5]],
+          "fiberSelfDurations": [[1, 1.5], [2, 6.5]],
+          "passiveEffectDuration": null,
+          "priorityLevel": "Normal",
+          "timestamp": 100,
+          "updaters": null
+        },
+        {
+          "changeDescriptions": null,
+          "duration": 5.5,
+          "effectDuration": null,
+          "fiberActualDurations": [[2, 5.5]],
+          "fiberSelfDurations": [[2, 5.5]],
+          "passiveEffectDuration": null,
+          "priorityLevel": "Normal",
+          "timestamp": 200,
+          "updaters": null
+        }
+      ],
+      "displayName": "RootLayout",
+      "initialTreeBaseDurations": [[1, 6.0], [2, 5.0]],
+      "operations": [],
+      "rootID": 1,
+      "snapshots": [
+        [1, {"id": 1, "children": [2], "displayName": "RootLayout", "hocDisplayNames": null, "key": null, "type": 5, "compiledWithForget": false}],
+        [2, {"id": 2, "children": [], "displayName": "SearchResults", "hocDisplayNames": null, "key": null, "type": 5, "compiledWithForget": false}]
+      ]
+    }
+  ],
+  "timelineData": []
+}

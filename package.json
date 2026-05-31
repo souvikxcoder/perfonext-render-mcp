@@ -1,0 +1,56 @@
+{
+  "name": "@perfonext/render-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for analyzing Next.js React Profiler exports and render performance",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "perfonext-render-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "inspector": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "github-copilot",
+    "nextjs",
+    "react-profiler",
+    "render",
+    "rerender",
+    "hydration",
+    "performance"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/souvikxcoder/perfonext-render-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/souvikxcoder/perfonext-render-mcp/issues"
+  },
+  "homepage": "https://github.com/souvikxcoder/perfonext-render-mcp#readme",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.3",
+    "vitest": "^3.2.4"
+  }
+}

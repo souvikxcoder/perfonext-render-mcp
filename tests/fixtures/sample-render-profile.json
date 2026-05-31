@@ -1,0 +1,53 @@
+{
+  "version": 5,
+  "dataForRoots": [
+    {
+      "commitData": [
+        {
+          "changeDescriptions": null,
+          "duration": 14.0,
+          "effectDuration": null,
+          "fiberActualDurations": [[1, 14.0], [2, 12.0], [3, 10.0], [4, 9.5]],
+          "fiberSelfDurations": [[1, 2.0], [2, 2.0], [3, 0.5], [4, 9.5]],
+          "passiveEffectDuration": null,
+          "priorityLevel": "Normal",
+          "timestamp": 100,
+          "updaters": null
+        },
+        {
+          "changeDescriptions": null,
+          "duration": 7.5,
+          "effectDuration": null,
+          "fiberActualDurations": [[3, 5.5], [4, 7.0]],
+          "fiberSelfDurations": [[3, 0.2], [4, 7.0]],
+          "passiveEffectDuration": null,
+          "priorityLevel": "Normal",
+          "timestamp": 200,
+          "updaters": null
+        },
+        {
+          "changeDescriptions": null,
+          "duration": 4.9,
+          "effectDuration": null,
+          "fiberActualDurations": [[3, 3.5], [4, 5.0]],
+          "fiberSelfDurations": [[3, 0.2], [4, 5.0]],
+          "passiveEffectDuration": null,
+          "priorityLevel": "Normal",
+          "timestamp": 300,
+          "updaters": null
+        }
+      ],
+      "displayName": "App",
+      "initialTreeBaseDurations": [[1, 12.0], [2, 10.0], [3, 8.0], [4, 8.0]],
+      "operations": [],
+      "rootID": 1,
+      "snapshots": [
+        [1, {"id": 1, "children": [2], "displayName": "App", "hocDisplayNames": null, "key": null, "type": 5, "compiledWithForget": false}],
+        [2, {"id": 2, "children": [3], "displayName": "SearchPage", "hocDisplayNames": null, "key": null, "type": 5, "compiledWithForget": false}],
+        [3, {"id": 3, "children": [4], "displayName": "SearchResults", "hocDisplayNames": null, "key": null, "type": 5, "compiledWithForget": false}],
+        [4, {"id": 4, "children": [], "displayName": "ProductList", "hocDisplayNames": null, "key": null, "type": 5, "compiledWithForget": false}]
+      ]
+    }
+  ],
+  "timelineData": []
+}
