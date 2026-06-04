@@ -3,6 +3,7 @@ import { basename } from 'node:path';
 
 import type {
   ComponentStats,
+  FiberNode,
   ParsedRenderProfile,
   RenderCommit,
   RenderMeasurement,
@@ -81,6 +82,53 @@ function buildSnapshotMap(snapshots: unknown): Map<number, string> {
   return map;
 }
 
+function buildFiberNodes(snapshots: unknown, rootId: number): FiberNode[] {
+  if (!Array.isArray(snapshots)) {
+    return [];
+  }
+
+  const nodeMap = new Map<number, SnapshotNodeRaw>();
+  const parentMap = new Map<number, number | null>();
+
+  for (const entry of snapshots) {
+    if (!Array.isArray(entry) || entry.length < 2) {
+      continue;
+    }
+
+    const [fiberId, node] = entry;
+    if (typeof fiberId !== 'number' || node === null || typeof node !== 'object') {
+      continue;
+    }
+
+    nodeMap.set(fiberId, node as SnapshotNodeRaw);
+    if (!parentMap.has(fiberId)) {
+      parentMap.set(fiberId, null);
+    }
+  }
+
+  for (const [fiberId, node] of nodeMap) {
+    const children = Array.isArray(node.children) ? node.children : [];
+    for (const childId of children) {
+      if (typeof childId === 'number' && nodeMap.has(childId)) {
+        parentMap.set(childId, fiberId);
+      }
+    }
+  }
+
+  return Array.from(nodeMap.entries()).map(([fiberId, node]) => ({
+    fiberId,
+    rootId,
+    componentName:
+      typeof node.displayName === 'string' && node.displayName.trim().length > 0
+        ? node.displayName
+        : `(fiber:${fiberId})`,
+    parentFiberId: parentMap.get(fiberId) ?? null,
+    childFiberIds: Array.isArray(node.children)
+      ? node.children.filter((childId): childId is number => typeof childId === 'number' && nodeMap.has(childId))
+      : [],
+  }));
+}
+
 /**
  * Build a Set of fiberIDs that existed before profiling started.
  * initialTreeBaseDurations is serialised as Array<[fiberID, duration]>.
@@ -105,6 +153,7 @@ function buildInitialFiberIDSet(initialTreeBaseDurations: unknown): Set<number> 
 function parseCommit(
   raw: CommitDataRaw,
   index: number,
+  rootId: number,
   snapshotMap: Map<number, string>,
   initialFiberIDs: Set<number>,
   seenFiberIDs: Set<number>,
@@ -167,6 +216,8 @@ function parseCommit(
     seenFiberIDs.add(fiberID);
 
     measurements.push({
+      fiberId: fiberID,
+      rootId,
       componentName,
       phase: isMount ? 'mount' : 'update',
       actualDuration,
@@ -181,6 +232,7 @@ function parseCommit(
 
   return {
     index,
+    rootId,
     duration: asNumber(raw.duration),
     timestamp: asNumber(raw.timestamp),
     priorityLevel: typeof raw.priorityLevel === 'string' ? raw.priorityLevel : null,
@@ -263,12 +315,15 @@ export function parseRenderProfile(content: string, filename: string): ParsedRen
   }
 
   const allCommits: RenderCommit[] = [];
+  const allFiberNodes: FiberNode[] = [];
 
   for (const rawRoot of parsed.dataForRoots) {
     const root = rawRoot as RootExportRaw;
+    const rootId = typeof root.rootID === 'number' ? root.rootID : 0;
 
     // fiberID -> displayName, built from the serialised snapshots map
     const snapshotMap = buildSnapshotMap(root.snapshots);
+    allFiberNodes.push(...buildFiberNodes(root.snapshots, rootId));
 
     // Fibers present before profiling started (used for mount vs update detection)
     const initialFiberIDs = buildInitialFiberIDSet(root.initialTreeBaseDurations);
@@ -281,7 +336,7 @@ export function parseRenderProfile(content: string, filename: string): ParsedRen
     const startIndex = allCommits.length;
     for (let i = 0; i < commitDataArray.length; i++) {
       allCommits.push(
-        parseCommit(commitDataArray[i], startIndex + i, snapshotMap, initialFiberIDs, seenFiberIDs),
+        parseCommit(commitDataArray[i], startIndex + i, rootId, snapshotMap, initialFiberIDs, seenFiberIDs),
       );
     }
   }
@@ -300,6 +355,7 @@ export function parseRenderProfile(content: string, filename: string): ParsedRen
     version: '5',
     rendererId: null,
     commits: allCommits,
+    fiberNodes: allFiberNodes,
     components,
     totalCommitDuration: allCommits.reduce((sum, c) => sum + c.duration, 0),
     totalRenderDuration: components.reduce((sum, c) => sum + c.totalActualDuration, 0),

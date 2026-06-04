@@ -7,10 +7,11 @@
 ## What It Does
 
 - loads exported React Profiler JSON files from Next.js apps
-- summarizes commits and the most expensive components
+- summarizes commits, the most expensive components, and detected render issues in one call
 - ranks the hottest commits and shows the top components inside each spike
 - identifies the slowest components by total render cost
 - highlights components with repeated rerenders using deterministic heuristics, evidence signals, and confidence levels
+- compares two render profiles to surface regressions and improvements
 - keeps the loaded profiles in memory so an MCP client can iterate without re-reading the file
 
 ## Tools
@@ -18,12 +19,15 @@
 | Tool | Description |
 |------|-------------|
 | `load_render_profile` | Parse and load an exported React Profiler JSON file from disk |
-| `get_render_summary` | Summarize a loaded profile, including top components by render cost and the hottest commits |
+| `get_render_summary` | Summarize a loaded profile: top components by render cost, hottest commits, and detected render issues (rerender storms, commit spikes) |
 | `get_hot_commits` | Rank the most expensive commits and show the top components inside each spike |
 | `get_slow_components` | Rank the slowest components by total actual render time |
 | `get_rerender_causes` | Explain likely rerender causes using profile-derived heuristics, evidence, confidence, and a documented score |
+| `compare_renders` | Diff two loaded render profiles and rank regressions, improvements, additions, and removals |
 
 `get_rerender_causes` is heuristic by design. It works from structural signals in the profiler export — update frequency, nested update propagation, commit spread, and self-intensive renders. When you record with **"Record why each component rendered"** enabled in React DevTools Profiler settings, the export includes richer `changeDescriptions` data; future versions of this tool will parse that field to surface exact prop/state/context diffs natively.
+
+`get_render_summary` includes an `issues` field with up to 5 detected render issues (commit spikes and rerender storms) so you get actionable findings in the same call as the summary.
 
 ## Rerender Score Contract
 
@@ -88,6 +92,7 @@ Local workspace MCP config is also included in `.vscode/mcp.json` for developmen
 
 - "Load the React Profiler export at `./profile.json` and summarize the hottest components."
 - "Show me the hottest commits in `./profile.json` and which components dominated each spike."
+- "Compare `before.json` and `after.json` and tell me which components regressed."
 - "Which components are consuming the most render time in this Next.js profile?"
 - "Show me the likely rerender causes for the slowest components, including evidence and confidence."
 

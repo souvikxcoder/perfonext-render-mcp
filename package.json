@@ -1,7 +1,7 @@
 {
   "name": "@perfonext/render-mcp",
-  "version": "0.1.0",
-  "description": "MCP server for analyzing Next.js React Profiler exports and render performance",
+  "version": "0.2.0",
+  "description": "MCP server for analyzing Next.js React Profiler exports: render summaries, rerender causes, hot commits, and profile diffing",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

@@ -13,14 +13,15 @@ export function registerGetHotCommits(server: McpServer): void {
       profileId: z.string().describe('Profile ID from load_render_profile'),
       limit: z.number().int().positive().max(25).optional().describe('How many commits to include. Defaults to 10.'),
       componentLimit: z.number().int().positive().max(10).optional().describe('How many top components to include per commit. Defaults to 3.'),
+      priorityLevel: z.string().optional().describe('Filter to commits with this priority level only. Common values: "Immediate" (synchronous, input-blocking), "Normal" (async, e.g. API responses). Omit to include all priorities.'),
     },
-  }, async ({ profileId, limit, componentLimit }) => {
+  }, async ({ profileId, limit, componentLimit, priorityLevel }) => {
     const profile = getRenderProfile(profileId);
     if (!profile) {
       throw new Error(`Profile "${profileId}" not found. Call get_render_summary without a profileId to list all loaded profiles.`);
     }
 
-    const hotCommits = getHotCommits(profile, limit ?? 10, componentLimit ?? 3).map(commit => ({
+    const hotCommits = getHotCommits(profile, limit ?? 10, componentLimit ?? 3, priorityLevel).map(commit => ({
       ...commit,
       duration: formatMs(commit.duration),
       totalActualDuration: formatMs(commit.totalActualDuration),
