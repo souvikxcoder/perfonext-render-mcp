@@ -3,7 +3,13 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { getHotCommits, getRenderSummary, getRerenderCauses, getSlowComponents } from '../src/parser/analysis.js';
+import {
+  compareRenders,
+  getHotCommits,
+  getRenderSummary,
+  getRerenderCauses,
+  getSlowComponents,
+} from '../src/parser/analysis.js';
 import { parseRenderProfile } from '../src/parser/react-profile.js';
 
 const fixturePath = resolve(import.meta.dirname, 'fixtures/sample-render-profile.json');
@@ -48,6 +54,7 @@ describe('render profile analysis', () => {
     expect(summary.hotCommits[0].commitIndex).toBe(0);
     expect(summary.hotCommits[0].topComponents.length).toBeGreaterThan(0);
     expect(summary.hotCommits[0].topComponents[0].componentName).toBe('App');
+    expect(Array.isArray(summary.issues)).toBe(true);
   });
 
   it('finds slow components and rerender signals', async () => {
@@ -76,6 +83,59 @@ describe('render profile analysis', () => {
     expect(hotCommits[0].topComponents).toHaveLength(2);
     expect(hotCommits[0].topComponents[0].shareOfCommitWork).toBeGreaterThan(0);
     expect(Array.isArray(hotCommits[0].updaterComponentNames)).toBe(true);
+  });
+
+  it('compares two render profiles and reports regressions', () => {
+    const baseProfile = parseRenderProfile(JSON.stringify({
+      version: 5,
+      dataForRoots: [{
+        commitData: [
+          {
+            duration: 5,
+            fiberActualDurations: [[1, 5], [2, 2]],
+            fiberSelfDurations: [[1, 2], [2, 2]],
+            priorityLevel: 'Normal',
+            timestamp: 100,
+          },
+        ],
+        displayName: 'App',
+        initialTreeBaseDurations: [[1, 3], [2, 2]],
+        rootID: 1,
+        snapshots: [
+          [1, { displayName: 'App', children: [2] }],
+          [2, { displayName: 'List', children: [] }],
+        ],
+      }],
+    }), 'base.json');
+
+    const currentProfile = parseRenderProfile(JSON.stringify({
+      version: 5,
+      dataForRoots: [{
+        commitData: [
+          {
+            duration: 9,
+            fiberActualDurations: [[1, 9], [2, 6], [3, 4]],
+            fiberSelfDurations: [[1, 3], [2, 6], [3, 4]],
+            priorityLevel: 'Normal',
+            timestamp: 100,
+          },
+        ],
+        displayName: 'App',
+        initialTreeBaseDurations: [[1, 3], [2, 2], [3, 1]],
+        rootID: 1,
+        snapshots: [
+          [1, { displayName: 'App', children: [2, 3] }],
+          [2, { displayName: 'List', children: [] }],
+          [3, { displayName: 'FilterBar', children: [] }],
+        ],
+      }],
+    }), 'current.json');
+
+    const comparison = compareRenders(baseProfile, currentProfile, 10, 0);
+
+    expect(comparison.regressions.some(entry => entry.componentName === 'App')).toBe(true);
+    expect(comparison.regressions.some(entry => entry.componentName === 'List')).toBe(true);
+    expect(comparison.added.some(entry => entry.componentName === 'FilterBar')).toBe(true);
   });
 
   it('counts nested updates from commit updaters field', () => {

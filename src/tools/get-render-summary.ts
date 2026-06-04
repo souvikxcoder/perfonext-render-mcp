@@ -8,7 +8,7 @@ import { getRenderProfile, listRenderProfiles } from '../store.js';
 export function registerGetRenderSummary(server: McpServer): void {
   server.registerTool('get_render_summary', {
     title: 'Get Render Summary',
-    description: 'Summarize the loaded Next.js render profile, including top components by render cost.',
+    description: 'Summarize the loaded Next.js render profile, including top components by render cost and detected render issues (rerender storms, commit spikes).',
     inputSchema: {
       profileId: z.string().optional().describe('Profile ID from load_render_profile. Omit to list loaded profiles.'),
       limit: z.number().int().positive().max(25).optional().describe('How many top components to include. Defaults to 10.'),

@@ -1,4 +1,6 @@
 export interface RenderMeasurement {
+  fiberId: number;
+  rootId: number;
   componentName: string;
   phase: string;
   actualDuration: number;
@@ -12,11 +14,20 @@ export interface RenderMeasurement {
 
 export interface RenderCommit {
   index: number;
+  rootId: number;
   duration: number;
   timestamp: number;
   priorityLevel: string | null;
   measurements: RenderMeasurement[];
   updaterComponentNames: string[];
+}
+
+export interface FiberNode {
+  fiberId: number;
+  rootId: number;
+  componentName: string;
+  parentFiberId: number | null;
+  childFiberIds: number[];
 }
 
 export interface ComponentStats {
@@ -37,6 +48,7 @@ export interface ParsedRenderProfile {
   version: string;
   rendererId: number | null;
   commits: RenderCommit[];
+  fiberNodes: FiberNode[];
   components: ComponentStats[];
   totalCommitDuration: number;
   totalRenderDuration: number;
@@ -64,6 +76,7 @@ export interface HotCommitComponentSummary {
 
 export interface HotCommitSummary {
   commitIndex: number;
+  rootId: number;
   duration: number;
   totalActualDuration: number;
   timestamp: number;
@@ -71,6 +84,40 @@ export interface HotCommitSummary {
   measurementCount: number;
   topComponents: HotCommitComponentSummary[];
   updaterComponentNames: string[];
+}
+
+export interface CommitBreakdownComponentSummary extends HotCommitComponentSummary {
+  mountCount: number;
+  updateCount: number;
+  nestedUpdateCount: number;
+}
+
+export interface CommitBreakdown {
+  commitIndex: number;
+  rootId: number;
+  duration: number;
+  totalActualDuration: number;
+  timestamp: number;
+  priorityLevel: string | null;
+  measurementCount: number;
+  updaterComponentNames: string[];
+  topComponents: CommitBreakdownComponentSummary[];
+  concentration: {
+    topComponentShare: number;
+    topThreeShare: number;
+  };
+  interpretation: string;
+}
+
+export interface RenderPropagationPath {
+  commitIndex: number;
+  rootId: number;
+  fiberPath: number[];
+  componentPath: string[];
+  depth: number;
+  totalActualDuration: number;
+  leafActualDuration: number;
+  includesUpdater: boolean;
 }
 
 export interface RerenderEvidence {
@@ -94,4 +141,41 @@ export interface RerenderCause {
   confidence: RerenderConfidence;
   evidence: RerenderEvidence[];
   likelyCauses: string[];
+}
+
+export type RenderIssueType = 'rerender-storm' | 'commit-spike' | 'cascading-render';
+export type RenderIssueSeverity = 'low' | 'medium' | 'high';
+
+export interface RenderIssue {
+  type: RenderIssueType;
+  severity: RenderIssueSeverity;
+  title: string;
+  summary: string;
+  componentName?: string;
+  commitIndex?: number;
+  evidence: RerenderEvidence[];
+}
+
+export type RenderDiffChangeType = 'regression' | 'improvement' | 'added' | 'removed';
+
+export interface RenderDiffEntry {
+  componentName: string;
+  changeType: RenderDiffChangeType;
+  baseTotalActualDuration: number;
+  currentTotalActualDuration: number;
+  totalActualDurationDelta: number;
+  averageActualDurationDelta: number;
+  maxActualDurationDelta: number;
+  renderCountDelta: number;
+  commitCountDelta: number;
+  percentChange: number | null;
+}
+
+export interface RenderComparison {
+  baseProfileId: string;
+  currentProfileId: string;
+  regressions: RenderDiffEntry[];
+  improvements: RenderDiffEntry[];
+  added: RenderDiffEntry[];
+  removed: RenderDiffEntry[];
 }
