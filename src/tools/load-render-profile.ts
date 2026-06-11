@@ -11,7 +11,9 @@ import { storeRenderProfile } from '../store.js';
 export function registerLoadRenderProfile(server: McpServer): void {
   server.registerTool('load_render_profile', {
     title: 'Load Render Profile',
-    description: 'Parse and load a React DevTools profiler export captured from a Next.js app. Returns a profile ID for use with the other render analysis tools.',
+    description: 'Load a React DevTools Profiler JSON export. ' +
+      'This is the entry point for the manual profiling path: open React DevTools in the browser → Profiler tab → Record → interact → Stop → Export JSON → share the file path here. ' +
+      'Returns a profileId for use with get_render_summary, get_slow_components, get_rerender_causes, and the other analysis tools.',
     inputSchema: {
       filePath: z.string().describe('Absolute or relative path to the exported React Profiler JSON file'),
     },
