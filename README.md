@@ -2,32 +2,81 @@
 
 [![npm](https://img.shields.io/npm/v/@perfonext/render-mcp)](https://www.npmjs.com/package/@perfonext/render-mcp)
 
-`perfonext-render-mcp` is an MCP server for loading and analyzing React DevTools Profiler exports captured from Next.js apps. It gives GitHub Copilot and other MCP clients structured render data they can reason over instead of forcing the model to inspect raw profiler JSON.
+`perfonext-render-mcp` is an MCP server for analyzing React render behavior in Next.js apps and applying fixes
+in the editor. It is the **agent companion** to React DevTools Profiler and `react-scan` — best at
+machine-readable summaries, exact rerender-cause attribution, source-aware follow-up, and diffing.
+
+The loop is **collect → analyze → fix**, all locally:
+
+- **collect** — choose live capture (react-scan/lite streams events in real time) or manual DevTools export
+- **analyze** — the MCP returns structured, machine-readable evidence: component costs, rerender causes, commit breakdowns, and regressions
+- **fix** — Copilot uses that evidence to propose and apply concrete code changes
+
+> **Note:** while a live capture session is active, React DevTools Timeline Profiler will not receive events
+> (react-scan/lite takes over the profiling channel). Calling `stop_render_capture` restores it.
 
 ## What It Does
 
-- loads exported React Profiler JSON files from Next.js apps
+- **live capture** — streams per-commit fiber events from a running React app directly into the MCP over a local HTTP endpoint; no manual export required
+- **manual export** — loads exported React DevTools Profiler JSON files as an alternative input path
 - summarizes commits, the most expensive components, and detected render issues in one call
 - ranks the hottest commits and shows the top components inside each spike
 - identifies the slowest components by total render cost
 - highlights components with repeated rerenders using deterministic heuristics, evidence signals, and confidence levels
 - compares two render profiles to surface regressions and improvements
-- keeps the loaded profiles in memory so an MCP client can iterate without re-reading the file
+- keeps profiles in memory so Copilot can iterate without re-loading
 
 ## Tools
 
+### Entry point
+
 | Tool | Description |
 |------|-------------|
-| `load_render_profile` | Parse and load an exported React Profiler JSON file from disk |
-| `get_render_summary` | Summarize a loaded profile: top components by render cost, hottest commits, and detected render issues (rerender storms, commit spikes) |
+| `begin_render_analysis` | Entry point. Accepts `approach: "live" \| "manual"`. For `live`: starts a capture session and returns the instrumentation snippet. For `manual`: returns React DevTools Profiler export steps. |
+
+### Live capture
+
+| Tool | Description |
+|------|-------------|
+| `run_render_capture` | Called after instrumentation is wired up. Accepts `method: "manual-interaction" \| "test-suite"`. Returns focused instructions for whichever method the user picks. |
+| `stop_render_capture` | Stop the session, finalize buffered events into a profile, and return a `profileId` for analysis |
+| `get_captured_renders` | Optional diagnostic: peek at session progress without stopping (commit count, unknown events). Only call if something seems wrong. |
+
+### Analysis
+
+| Tool | Description |
+|------|-------------|
+| `load_render_profile` | Parse and load an exported React DevTools Profiler JSON file from disk (manual path entry point) |
+| `get_render_summary` | Summarize a loaded profile: top components by render cost, hottest commits, and detected render issues |
 | `get_hot_commits` | Rank the most expensive commits and show the top components inside each spike |
 | `get_slow_components` | Rank the slowest components by total actual render time |
-| `get_rerender_causes` | Explain likely rerender causes using profile-derived heuristics, evidence, confidence, and a documented score |
+| `get_rerender_causes` | Explain rerender causes with evidence, confidence, and a risk score |
 | `compare_renders` | Diff two loaded render profiles and rank regressions, improvements, additions, and removals |
 
-`get_rerender_causes` is heuristic by design. It works from structural signals in the profiler export — update frequency, nested update propagation, commit spread, and self-intensive renders. When you record with **"Record why each component rendered"** enabled in React DevTools Profiler settings, the export includes richer `changeDescriptions` data; future versions of this tool will parse that field to surface exact prop/state/context diffs natively.
+## Quickstart
 
-`get_render_summary` includes an `issues` field with up to 5 detected render issues (commit spikes and rerender storms) so you get actionable findings in the same call as the summary.
+Ask Copilot: *"Run a render analysis on my app."*
+
+Copilot calls `begin_render_analysis` and asks you to choose:
+
+**Option A — Live capture (recommended)**
+
+Copilot will:
+1. Start a capture session (ingest server on `127.0.0.1:7721`)
+2. Install `react-scan` as a devDependency if not present
+3. Write `instrumentation-client.js` at your project root with the session snippet
+4. Import it from your app's client-side entry point
+5. Ask whether you want to interact manually or run a test suite (`run_render_capture`)
+6. Stop the session and run analysis
+
+The ingest server runs on a **fixed port (7721)**. Only the `sessionId` line in `instrumentation-client.js` changes between sessions — the file does not need to be re-wired each time.
+
+**Option B — Manual DevTools export**
+
+1. Open React DevTools in the browser → Profiler tab → Record
+2. Interact with the app
+3. Export the JSON and share the file path
+4. Copilot calls `load_render_profile({ filePath: "..." })`
 
 ## Rerender Score Contract
 
@@ -44,16 +93,18 @@
   - `high`: three or more independent signals
 - `evidence[]`: machine-readable signals such as repeated updates, nested-update propagation, wide commit spread, or high actual-vs-self duration ratio
 
-Current score inputs are:
+The score ranks investigation order, not exact root cause.
 
-- repeated update-phase renders
-- nested update propagation
-- appearance across many commits
-- high actual-vs-self duration ratio
+## Example Copilot Prompts
 
-The score is meant to help rank investigation order, not to claim exact root cause. Enable **"Record why each component rendered"** in React DevTools Profiler settings before recording to capture richer change metadata in the export.
+- "Run a render analysis on my app."
+- "Stop the capture and show me the slowest components."
+- "Which components are re-rendering the most and why?"
+- "Compare this run to the profile I captured before the refactor."
+- "I already have a React DevTools export — load it and tell me what's slow."
 
 ## Install
+
 
 Run directly with `npx`:
 
@@ -71,7 +122,7 @@ The executable command remains `perfonext-render-mcp` after installation.
 
 ## MCP Configuration
 
-Add this server to VS Code settings:
+Add to your VS Code `settings.json`:
 
 ```json
 {
@@ -86,15 +137,14 @@ Add this server to VS Code settings:
 }
 ```
 
-Local workspace MCP config is also included in `.vscode/mcp.json` for development.
-
 ## Example Copilot Prompts
 
-- "Load the React Profiler export at `./profile.json` and summarize the hottest components."
-- "Show me the hottest commits in `./profile.json` and which components dominated each spike."
-- "Compare `before.json` and `after.json` and tell me which components regressed."
-- "Which components are consuming the most render time in this Next.js profile?"
-- "Show me the likely rerender causes for the slowest components, including evidence and confidence."
+- "Run a render analysis on my app."
+- "Stop the capture and show me the slowest components."
+- "Which components are re-rendering the most and why?"
+- "Compare this run to the profile I captured before the refactor."
+- "I already have a React DevTools export — load it and tell me what's slow."
+- "Show me the hottest commits and which components dominated each spike."
 
 ## Development
 
@@ -104,7 +154,7 @@ npm run build
 npm test
 ```
 
-Sample fixtures for local validation live under `tests/fixtures/`.
+Sample fixtures live under `tests/fixtures/`.
 
 ## License
 
