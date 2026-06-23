@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import { deleteCaptureSession, getCaptureSession, stopCaptureSession } from '../ingest/server.js';
+import { isAnalyzableComponent } from '../parser/analysis.js';
 import { adaptReactScanEvents } from '../parser/react-scan-lite.js';
 import { storeRenderProfile } from '../store.js';
 import { formatMs } from '../format.js';
@@ -61,9 +62,10 @@ export function registerStopRenderCapture(server: McpServer): void {
       profileId: profile.id,
       sessionId,
       commitCount: profile.commits.length,
-      componentCount: profile.components.length,
+      componentCount: profile.components.filter(c => isAnalyzableComponent(c.componentName)).length,
       totalCommitDuration: formatMs(profile.totalCommitDuration),
       profilingAvailable: session.profilingAvailable,
+      dataQuality: profile.hasChangeDescriptions ? 'exact' : 'heuristic',
       nextStep: `call get_render_summary with profileId "${profile.id}"`,
     };
 

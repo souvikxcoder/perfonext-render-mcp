@@ -30,6 +30,24 @@ export interface FiberNode {
   childFiberIds: number[];
 }
 
+export interface ComponentSource {
+  fileName: string;
+  lineNumber: number;
+  columnNumber?: number;
+}
+
+/** Aggregated exact causes derived from react-scan/lite changeDescription data. */
+export interface ChangeCauses {
+  /** Unique prop names that changed across all update renders. */
+  props: string[];
+  stateChanged: boolean;
+  contextChanged: boolean;
+  /** Unique hook identifiers (e.g. "hook[0]") that fired. */
+  hooks: string[];
+  /** True if at least one render was triggered by a parent re-render (no own prop/state change). */
+  parentTriggered: boolean;
+}
+
 export interface ComponentStats {
   componentName: string;
   renderCount: number;
@@ -40,6 +58,9 @@ export interface ComponentStats {
   totalSelfDuration: number;
   maxActualDuration: number;
   commitIndices: number[];
+  source?: ComponentSource;
+  /** Present only when react-scan/lite captured actual changeDescription data in a real browser. */
+  changeCauses?: ChangeCauses;
 }
 
 export interface ParsedRenderProfile {
@@ -52,6 +73,8 @@ export interface ParsedRenderProfile {
   components: ComponentStats[];
   totalCommitDuration: number;
   totalRenderDuration: number;
+  /** True when at least one fiber carried changeDescription data (react-scan/lite in-browser capture). */
+  hasChangeDescriptions: boolean;
 }
 
 export interface RenderSummaryEntry {
@@ -64,6 +87,7 @@ export interface RenderSummaryEntry {
   averageActualDuration: number;
   maxActualDuration: number;
   commitCount: number;
+  source?: ComponentSource;
 }
 
 export interface HotCommitComponentSummary {
@@ -141,6 +165,7 @@ export interface RerenderCause {
   confidence: RerenderConfidence;
   evidence: RerenderEvidence[];
   likelyCauses: string[];
+  source?: ComponentSource;
 }
 
 export type RenderIssueType = 'rerender-storm' | 'commit-spike' | 'cascading-render';

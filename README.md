@@ -22,7 +22,10 @@ The loop is **collect → analyze → fix**, all locally:
 - summarizes commits, the most expensive components, and detected render issues in one call
 - ranks the hottest commits and shows the top components inside each spike
 - identifies the slowest components by total render cost
-- highlights components with repeated rerenders using deterministic heuristics, evidence signals, and confidence levels
+- highlights components with repeated rerenders, reporting the **exact** changed props/state/hooks when live
+  capture provides `changeDescription` data, and falling back to deterministic heuristics otherwise
+- annotates ranked components with their source file and line when available
+- filters DOM host elements (`div`, `span`, …) and unnamed components out of ranked output so findings stay actionable
 - compares two render profiles to surface regressions and improvements
 - keeps profiles in memory so Copilot can iterate without re-loading
 
@@ -38,8 +41,8 @@ The loop is **collect → analyze → fix**, all locally:
 
 | Tool | Description |
 |------|-------------|
-| `run_render_capture` | Called after instrumentation is wired up. Accepts `method: "manual-interaction" \| "test-suite"`. Returns focused instructions for whichever method the user picks. |
-| `stop_render_capture` | Stop the session, finalize buffered events into a profile, and return a `profileId` for analysis |
+| `run_render_capture` | Called after instrumentation is wired up. Accepts `method: "manual-interaction" \| "test-suite"`. Returns focused instructions for whichever method the user picks. Test suites must run **headed** (e.g. `playwright test --headed`) so React profiling hooks activate. |
+| `stop_render_capture` | Stop the session, finalize buffered events into a profile, and return a `profileId` plus `dataQuality` (`exact` \| `heuristic`) for analysis |
 | `get_captured_renders` | Optional diagnostic: peek at session progress without stopping (commit count, unknown events). Only call if something seems wrong. |
 
 ### Analysis
@@ -50,7 +53,7 @@ The loop is **collect → analyze → fix**, all locally:
 | `get_render_summary` | Summarize a loaded profile: top components by render cost, hottest commits, and detected render issues |
 | `get_hot_commits` | Rank the most expensive commits and show the top components inside each spike |
 | `get_slow_components` | Rank the slowest components by total actual render time |
-| `get_rerender_causes` | Explain rerender causes with evidence, confidence, and a risk score |
+| `get_rerender_causes` | Explain rerender causes with evidence, confidence, and a risk score. Reports exact changed props/state/hooks when `changeDescription` data is present (`dataQuality: "exact"`), heuristics otherwise |
 | `compare_renders` | Diff two loaded render profiles and rank regressions, improvements, additions, and removals |
 
 ## Quickstart
@@ -69,6 +72,10 @@ Copilot will:
 5. Ask whether you want to interact manually or run a test suite (`run_render_capture`)
 6. Stop the session and run analysis
 
+> Running a test suite? Launch it **headed** (e.g. `playwright test --headed`). A headless browser does not
+> expose the React DevTools profiling channel, so `changeDescription` data is unavailable and causes fall back
+> to heuristics (`dataQuality: "heuristic"`).
+
 The ingest server runs on a **fixed port (7721)**. Only the `sessionId` line in `instrumentation-client.js` changes between sessions — the file does not need to be re-wired each time.
 
 **Option B — Manual DevTools export**
@@ -80,9 +87,15 @@ The ingest server runs on a **fixed port (7721)**. Only the `sessionId` line in 
 
 ## Rerender Score Contract
 
-`get_rerender_causes` returns a `score`, `scoreBand`, `confidence`, and `evidence[]` for each component.
+`get_rerender_causes` returns a `dataQuality`, and per component a `score`, `scoreBand`, `confidence`,
+`evidence[]`, and (when known) a `source` file/line.
 
-- `score`: a `0-10` heuristic rerender-risk score
+- `dataQuality`:
+  - `exact`: at least one fiber carried real `changeDescription` data (live capture in a headed browser), so
+    causes name the specific props/state/hooks that changed
+  - `heuristic`: no diff data available (DevTools JSON export, or a headless run), so causes are inferred from
+    render patterns
+- `score`: a `0-10` rerender-risk score
 - `scoreBand`:
   - `low`: `0.0-2.9`
   - `medium`: `3.0-5.9`
@@ -91,7 +104,8 @@ The ingest server runs on a **fixed port (7721)**. Only the `sessionId` line in 
   - `low`: one weak signal or only fallback export evidence
   - `medium`: two independent signals
   - `high`: three or more independent signals
-- `evidence[]`: machine-readable signals such as repeated updates, nested-update propagation, wide commit spread, or high actual-vs-self duration ratio
+- `evidence[]`: machine-readable signals such as exact change descriptions, repeated updates, nested-update
+  propagation, wide commit spread, or high actual-vs-self duration ratio
 
 The score ranks investigation order, not exact root cause.
 

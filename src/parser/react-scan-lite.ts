@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import type { ReactScanCommitEvent, ReactScanFiberEvent } from '../ingest/server.js';
 import type {
+  ChangeCauses,
+  ComponentSource,
   ComponentStats,
   FiberNode,
   ParsedRenderProfile,
@@ -128,6 +130,72 @@ export function adaptReactScanEvents(
   }
 
   const components = buildComponentStats(commits);
+
+  // Single pass over raw fibers to collect source, changeCauses, and hasChangeDescriptions.
+  const sourceMap = new Map<string, ComponentSource>();
+  const changeCausesMap = new Map<string, {
+    props: Set<string>;
+    stateChanged: boolean;
+    contextChanged: boolean;
+    hooks: Set<string>;
+    parentTriggered: boolean;
+  }>();
+  let hasChangeDescriptions = false;
+
+  for (const raw of rawCommits) {
+    for (const fiber of raw.fibers ?? []) {
+      const name = fiber.name?.trim() || `(fiber:${fiber.fiberId})`;
+
+      if (fiber.source && !sourceMap.has(name)) {
+        sourceMap.set(name, {
+          fileName: fiber.source.fileName,
+          lineNumber: fiber.source.lineNumber,
+          columnNumber: fiber.source.columnNumber,
+        });
+      }
+
+      const cd = fiber.changeDescription;
+      if (cd == null || cd.isFirstMount) continue;
+
+      // Count as "exact" only when at least one diff field carries real data.
+      const hasRealDiff =
+        (cd.props?.length ?? 0) > 0 ||
+        cd.state !== null ||
+        cd.context !== null ||
+        (cd.hooks?.length ?? 0) > 0;
+
+      if (hasRealDiff) hasChangeDescriptions = true;
+
+      // Aggregate per-component causes (even parent-only renders are tracked).
+      let causes = changeCausesMap.get(name);
+      if (!causes) {
+        causes = { props: new Set(), stateChanged: false, contextChanged: false, hooks: new Set(), parentTriggered: false };
+        changeCausesMap.set(name, causes);
+      }
+      for (const p of cd.props ?? []) causes.props.add(p);
+      if (cd.state !== null) causes.stateChanged = true;
+      if (cd.context !== null) causes.contextChanged = true;
+      for (const h of cd.hooks ?? []) causes.hooks.add(h);
+      if (cd.parent === true) causes.parentTriggered = true;
+    }
+  }
+
+  for (const component of components) {
+    const src = sourceMap.get(component.componentName);
+    if (src) component.source = src;
+
+    const raw = changeCausesMap.get(component.componentName);
+    if (raw && (raw.props.size > 0 || raw.stateChanged || raw.contextChanged || raw.hooks.size > 0 || raw.parentTriggered)) {
+      const changeCauses: ChangeCauses = {
+        props: Array.from(raw.props),
+        stateChanged: raw.stateChanged,
+        contextChanged: raw.contextChanged,
+        hooks: Array.from(raw.hooks),
+        parentTriggered: raw.parentTriggered,
+      };
+      component.changeCauses = changeCauses;
+    }
+  }
   const totalCommitDuration = commits.reduce((sum, c) => sum + c.duration, 0);
   const totalRenderDuration = commits.reduce(
     (sum, c) => sum + c.measurements.reduce((ms, m) => ms + m.actualDuration, 0),
@@ -144,5 +212,6 @@ export function adaptReactScanEvents(
     components,
     totalCommitDuration,
     totalRenderDuration,
+    hasChangeDescriptions,
   };
 }
