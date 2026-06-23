@@ -10,6 +10,7 @@ export interface ReactScanChangeDescription {
   state?: string[] | null;
   context?: string[] | null;
   hooks?: string[] | null;
+  parent?: boolean;
   isFirstMount?: boolean;
 }
 
@@ -83,6 +84,7 @@ function normalizeFiber(raw: RawFiber): ReactScanFiberEvent {
       state: cd.state ? ['state'] : null,
       context: cd.context ? ['context'] : null,
       hooks: cd.hooks?.map((i: number) => `hook[${i}]`) ?? null,
+      parent: cd.parent ?? false,
     } : null,
     source: (raw.source && typeof raw.source === 'object') ? raw.source as ReactScanSource : null,
     parentId: null,

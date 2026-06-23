@@ -359,5 +359,6 @@ export function parseRenderProfile(content: string, filename: string): ParsedRen
     components,
     totalCommitDuration: allCommits.reduce((sum, c) => sum + c.duration, 0),
     totalRenderDuration: components.reduce((sum, c) => sum + c.totalActualDuration, 0),
+    hasChangeDescriptions: false,
   };
 }

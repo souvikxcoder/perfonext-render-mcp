@@ -54,8 +54,10 @@ export function registerRunRenderCapture(server: McpServer): void {
       sessionId,
       instructions: [
         '1. Start the dev server if not already running (e.g. `npm run dev`).',
-        '2. Run your test suite. Scope to a single test file or feature to keep the payload manageable.',
-        '3. When the run finishes, call stop_render_capture to end the session.',
+        '2. Inspect the project to find available Playwright test files. Pick one relevant to what you want to profile.',
+        '3. Run the test suite with the --headed flag:',
+        '   npx playwright test <test-file> --headed',
+        '4. When the test run finishes, call stop_render_capture to end the session.',
       ].join('\n'),
       nextStep: `stop_render_capture({ sessionId: "${sessionId}" })`,
     };

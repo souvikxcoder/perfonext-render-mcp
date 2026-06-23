@@ -26,25 +26,21 @@ export function registerGetRerenderCauses(server: McpServer): void {
       totalActualDuration: formatMs(cause.totalActualDuration),
     }));
 
+    const dataQuality = profile.hasChangeDescriptions ? 'exact' : 'heuristic';
+    const qualityNote = profile.hasChangeDescriptions
+      ? 'Causes are based on exact prop/state changeDescription data from react-scan/lite.'
+      : 'Causes are heuristic — no prop/state diff data available. Run live capture (begin_render_analysis, approach: live) in a real browser to get exact change descriptions.';
+
     return {
       content: [{
         type: 'text' as const,
         text: JSON.stringify({
           profileId,
-          note: 'Rerender causes are heuristic because exported React Profiler JSON does not include direct prop/state diff metadata.',
+          dataQuality,
+          note: qualityNote,
           scoreDocumentation: {
-            meaning: '0-10 heuristic rerender risk score. Higher means stronger evidence that repeated rerenders are worth investigating.',
-            thresholds: {
-              low: '0.0-2.9',
-              medium: '3.0-5.9',
-              high: '6.0-10.0',
-            },
-            factors: [
-              'Repeated update-phase renders',
-              'Nested update propagation (component listed as updater for its own commit)',
-              'Presence across many commits',
-              'Self-intensive render (high self-to-actual ratio, low child delegation)',
-            ],
+            meaning: '0-10 rerender risk score. Factors: update frequency, nested updates, commit spread, self-intensive render, average render duration.',
+            thresholds: { low: '0.0-2.9', medium: '3.0-5.9', high: '6.0-10.0' },
           },
           causes,
         }, null, 2),

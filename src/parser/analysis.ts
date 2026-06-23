@@ -1,6 +1,7 @@
 import type {
   CommitBreakdown,
   CommitBreakdownComponentSummary,
+  ComponentSource,
   FiberNode,
   HotCommitComponentSummary,
   HotCommitSummary,
@@ -29,6 +30,22 @@ function getScoreBand(score: number): RerenderScoreBand {
   }
 
   return 'low';
+}
+
+/** Returns true for React host (DOM/SVG) elements — first character is lowercase. */
+function isHostElement(name: string): boolean {
+  const first = name.charCodeAt(0);
+  return first >= 97 /* a */ && first <= 122 /* z */;
+}
+
+/** Returns true for unnamed/anonymous components that can't be actionably diagnosed. */
+function isAnonymousComponent(name: string): boolean {
+  return name === 'Anonymous' || name.startsWith('(fiber:');
+}
+
+/** Returns true for named React components that appear in ranked analysis output. */
+export function isAnalyzableComponent(name: string): boolean {
+  return !isHostElement(name) && !isAnonymousComponent(name);
 }
 
 function getConfidence(evidenceCount: number): RerenderConfidence {
@@ -91,6 +108,7 @@ function getCommitTopComponents(commit: RenderCommit, limit: number): HotCommitC
   }
 
   return Array.from(components.values())
+    .filter(component => !isHostElement(component.componentName) && !isAnonymousComponent(component.componentName))
     .sort((left, right) => right.actualDuration - left.actualDuration)
     .slice(0, limit)
     .map(component => ({
@@ -146,19 +164,36 @@ export function getRenderSummary(profile: ParsedRenderProfile, limit = 10): {
   topComponents: RenderSummaryEntry[];
   hotCommits: HotCommitSummary[];
   issues: RenderIssue[];
+  warnings: string[];
+  dataQuality: 'heuristic' | 'exact';
 } {
+  const anonymousNames = profile.components
+    .filter(c => isAnonymousComponent(c.componentName))
+    .map(c => c.componentName);
+  const uniqueAnonymous = [...new Set(anonymousNames)];
+
+  const warnings: string[] = [];
+  if (uniqueAnonymous.length > 0) {
+    warnings.push(
+      `${uniqueAnonymous.length} unnamed component${uniqueAnonymous.length > 1 ? 's' : ''} found (e.g. "Anonymous"). ` +
+      `These are excluded from analysis. Add a displayName or convert arrow functions to named function expressions to get actionable results.`,
+    );
+  }
+
   return {
     profileId: profile.id,
     filename: profile.filename,
     version: profile.version,
     rendererId: profile.rendererId,
     commitCount: profile.commits.length,
-    componentCount: profile.components.length,
+    componentCount: profile.components.filter(c => isAnalyzableComponent(c.componentName)).length,
     totalCommitDuration: profile.totalCommitDuration,
     totalRenderDuration: profile.totalRenderDuration,
     hotCommits: getHotCommits(profile, Math.min(3, profile.commits.length), 3),
     topComponents: getSlowComponents(profile, limit),
     issues: detectRenderIssues(profile, 5),
+    warnings,
+    dataQuality: profile.hasChangeDescriptions ? 'exact' : 'heuristic',
   };
 }
 
@@ -169,7 +204,11 @@ export function getSlowComponents(
   minDuration = 0,
 ): RenderSummaryEntry[] {
   const entries: RenderSummaryEntry[] = profile.components
-    .filter(component => component.totalActualDuration >= minDuration)
+    .filter(component =>
+      !isHostElement(component.componentName) &&
+      !isAnonymousComponent(component.componentName) &&
+      component.totalActualDuration >= minDuration,
+    )
     .map(component => ({
       componentName: component.componentName,
       renderCount: component.renderCount,
@@ -182,6 +221,7 @@ export function getSlowComponents(
         : 0,
       maxActualDuration: component.maxActualDuration,
       commitCount: component.commitIndices.length,
+      ...(component.source ? { source: component.source } : {}),
     }));
 
   if (sortBy === 'average') {
@@ -198,6 +238,8 @@ export function getSlowComponents(
 export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minDuration = 0): RerenderCause[] {
   const causes = profile.components
     .filter(component =>
+      !isHostElement(component.componentName) &&
+      !isAnonymousComponent(component.componentName) &&
       (component.updateCount > 0 || component.nestedUpdateCount > 0) &&
       component.totalActualDuration >= minDuration,
     )
@@ -207,6 +249,34 @@ export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minD
       const selfToActualRatio = component.totalActualDuration > 0
         ? component.totalSelfDuration / component.totalActualDuration
         : 0;
+      const avgDuration = component.renderCount > 0
+        ? component.totalActualDuration / component.renderCount
+        : 0;
+
+      // ── Exact path: use changeDescription data when available ──────────────
+      const cc = component.changeCauses;
+      const hasExactCauses = cc != null;
+      if (hasExactCauses && cc) {
+        const parts: string[] = [];
+        if (cc.props.length > 0) parts.push(`props changed: ${cc.props.join(', ')}`);
+        if (cc.stateChanged) parts.push('state changed');
+        if (cc.contextChanged) parts.push('context changed');
+        if (cc.hooks.length > 0) parts.push(`hooks fired: ${cc.hooks.join(', ')}`);
+        if (cc.parentTriggered && parts.length === 0) parts.push('parent re-rendered (no own prop/state change)');
+
+        if (parts.length > 0) {
+          likelyCauses.push(
+            `${component.componentName} re-rendered because: ${parts.join('; ')}.` +
+            (cc.parentTriggered && parts.length > 1 ? ' Also triggered by parent re-renders.' : ''),
+          );
+          evidence.push({
+            signal: 'exact-change-description',
+            observed: parts.join('; '),
+            threshold: 'n/a',
+            detail: `react-scan/lite reported exact change causes for ${component.componentName} across ${component.updateCount} update render${component.updateCount === 1 ? '' : 's'}.`,
+          });
+        }
+      }
 
       if (component.updateCount >= 2) {
         const updatePct = component.renderCount > 0
@@ -286,7 +356,7 @@ export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minD
           signal: 'wide-commit-spread',
           observed: component.commitIndices.length,
           threshold: 3,
-          detail: `${component.componentName} shows up across ${component.commitIndices.length} commits, which usually means rerender pressure is sustained rather than a one-off spike.`,
+          detail: `${component.componentName} shows up across ${component.commitIndices.length} commits (${commitList}), which usually means rerender pressure is sustained rather than a one-off spike.`,
         });
       }
 
@@ -305,14 +375,16 @@ export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minD
         });
       }
 
+      // Score: update count (capped) + nested updates + commit spread + self-intensive + avg duration factor
       const score = Math.min(10, Number((
         Math.min(3, component.updateCount)
         + Math.min(3, component.nestedUpdateCount * 1.5)
         + (component.commitIndices.length >= 3 ? 2 : component.commitIndices.length >= 2 ? 1 : 0)
         + (selfToActualRatio >= 0.9 ? 2 : selfToActualRatio >= 0.75 ? 1 : 0)
+        + Math.min(2, avgDuration / 10)  // up to +2 for components averaging ≥20ms per render
       ).toFixed(1)));
 
-      return {
+      const result: RerenderCause = {
         componentName: component.componentName,
         renderCount: component.renderCount,
         updateCount: component.updateCount,
@@ -325,7 +397,9 @@ export function getRerenderCauses(profile: ParsedRenderProfile, limit = 10, minD
         ),
         evidence,
         likelyCauses,
-      } satisfies RerenderCause;
+      };
+      if (component.source) result.source = component.source;
+      return result;
     })
     .sort((left, right) => {
       if (right.score !== left.score) {
